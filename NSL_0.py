@@ -3,7 +3,9 @@
 # │ Developed by Ibrahim - © 2025                      │
 # │ Private Project – Unauthorized use prohibited      │
 # │ GitHub Repo: https://github.com/k7fi/NSL           │
-# │ SHA256 Hash: [your file hash here]                 │
+# │ SHA256 Hash: [36ce272ee52870424c9f12d568447ec33d6f |
+# | ce0d70fe94fc08fb55f24bea8b5a38f1bf4f767efe3bfb3168 |
+# | dbc046cb269616a2e104a2093952ed06cafed3b394]        |        │
 # └────────────────────────────────────────────────────┘
 
 
