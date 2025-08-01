@@ -1,3 +1,12 @@
+# ┌────────────────────────────────────────────────────┐
+# │ NSL (Nmap Scripting Lookup Tool)                   │
+# │ Developed by Ibrahim - © 2025                      │
+# │ Private Project – Unauthorized use prohibited      │
+# │ GitHub Repo: https://github.com/k7fi/NSL           │
+# │ SHA256 Hash: [your file hash here]                 │
+# └────────────────────────────────────────────────────┘
+
+
 #!/bin/bash
 # Colors
 RED='\033[0;31m'
