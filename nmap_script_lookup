@@ -1,0 +1,186 @@
+#!/bin/bash
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[1;36m'
+WHITE='\033[1;38m'
+B_YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+LOG_DIR="/home/hemobaker/nmap_logs"  # Change this to any desired directory path
+mkdir -p "$LOG_DIR"        # Ensure the directory exists
+LOG_FILE="nmap_scan_results_$(date +%F_%H-%M-%S).log"
+
+# Set script directory (configurable)
+SCRIPTS_DIR=${SCRIPTS_DIR:-"/usr/share/nmap/scripts"}
+
+# Validate directory exists
+if [ ! -d "$SCRIPTS_DIR" ]; then
+  echo -e "${RED}Error: Script directory '$SCRIPTS_DIR' not found!${NC}"
+  exit 1
+fi
+
+# Function to display Nmap script categories and descriptions
+display_categories() {
+  echo -e "${YELLOW}Available Nmap Script Categories:${NC}"
+  echo -e "${RED}- auth${NC}       →${WHITE} Authentication-related scripts (e.g., brute-force checks)${NC}"
+  echo -e "${RED}- broadcast${NC}  →${WHITE} Discovery scripts using network broadcasts"
+  echo -e "${RED}- default${NC}    →${WHITE} Standard scripts executed when using -sC "
+  echo -e "${RED}- discovery${NC}  →${WHITE} Host and service discovery scripts"
+  echo -e "${RED}- dos${NC}        →${WHITE} Denial-of-Service test scripts"
+  echo -e "${RED}- exploit${NC}    →${WHITE} Exploitation scripts targeting vulnerabilities"
+  echo -e "${RED}- intrusive${NC}  →${WHITE} Potentially aggressive scripts"
+  echo -e "${RED}- malware${NC}    →${WHITE} Malware detection scripts"
+  echo -e "${RED}- safe${NC}       →${WHITE} Scripts that do not harm the target"
+  echo -e "${RED}- version${NC}    →${WHITE} Service version detection scripts"
+  echo -e "${RED}- vuln${NC}       →${WHITE} Vulnerability assessment scripts"
+}
+
+# Function to display script information
+display_script_info() {
+  local script_name="$1"
+  local script_name_without_extension="${script_name%.nse}"
+  
+  nmap --script-help "$script_name_without_extension" 2>/dev/null | while read -r line; do
+    if echo "$line" | grep -q "Categories:"; then
+      local categories_text
+      categories_text=$(echo "$line" | sed "s/$script_name_without_extension//; s/Categories://")
+      echo -e "${BLUE}$script_name_without_extension${NC} Categories:${RED}$categories_text${NC}"
+    else
+      echo -e "${GREEN}$line${NC}"
+    fi
+  done
+}
+
+# Trap SIGINT (CTRL+C) to prevent script from exiting completely
+trap "echo -e '${RED}Scan aborted. Returning to menu.${NC}'" SIGINT
+
+declare -A script_map
+
+while true; do
+  echo -e "${YELLOW}(Available Options):${NC}"
+  echo -e "${B_YELLOW}-s${NC}|${RED}<keyword>${NC}                Search for scripts by keyword.${NC}"
+  echo -e "${B_YELLOW}-c${NC}|${RED}<category>${NC}               Filter scripts by category (e.g., vuln, auth, exploit).${NC}"
+  echo -e "${B_YELLOW}-l${NC}|${RED}<script_number>${NC}          View details of a script from search results.${NC}"
+  echo -e "${B_YELLOW}-r${NC}|${RED}<script_number> <IP>${NC}   Run a selected script on a target IP.${NC}"
+  echo -e "${B_YELLOW}-m${NC}|${RED}<target_IP>${NC}              Perform multi-target scanning (IP range or multiple IPs).${NC}"
+  echo -e "${B_YELLOW}-v${NC}|${RED}<target_IP>${NC}              Run vulnerability assessment scripts on a target IP.${NC}"
+  echo -e "${B_YELLOW}clear${NC}               Clear the screen.${NC}"
+  echo -e "${B_YELLOW}exit ${NC}               Exit the script.${NC}"
+  
+  
+  read -r input
+  option=$(echo "$input" | awk '{print $1}')
+  keyword_or_number=$(echo "$input" | awk '{print $2}')
+  target_ip=$(echo "$input" | awk '{print $3}')
+
+  case "$option" in
+    clear)
+      clear
+      echo -e "${GREEN}Screen cleared.${NC}"
+      ;;
+    
+    -s)
+      if [ -z "$keyword_or_number" ]; then
+        echo -e "${RED}Please provide a keyword to search.${NC}"
+        continue
+      fi
+
+      matching_scripts=$(ls "$SCRIPTS_DIR" | grep -i "$keyword_or_number")
+      if [ -z "$matching_scripts" ]; then
+        echo -e "${RED}No scripts found matching '$keyword_or_number'.${NC}"
+      else
+        echo -e "--------------------${PURPLE}Scripts found${NC}--------------------"
+        i=1
+        while read -r script; do
+          echo -e "${CYAN}$i. $script${NC}"
+          script_map[$i]=$script
+          ((i++))
+        done <<< "$matching_scripts"
+        echo -e "----------------------------------------------------------"
+      fi
+      ;;
+-c)
+      if [ -z "$keyword_or_number" ]; then
+        display_categories  # Show category list if no category is entered
+      else
+        matching_scripts=$(grep -rl "Categories:.*$keyword_or_number" "$SCRIPTS_DIR"/*.nse)
+        if [ -z "$matching_scripts" ]; then
+          echo -e "${RED}No scripts found in category '$keyword_or_number'.${NC}"
+        else
+          echo -e "${BLUE}Scripts in category '$keyword_or_number':${NC}"
+          i=1
+          while read -r script_path; do
+            script_name=$(basename "$script_path")
+            echo -e "${BLUE}$i. $script_name${NC}"
+            script_map[$i]=$script_name
+            ((i++))
+          done <<< "$matching_scripts"
+        fi
+      fi
+      ;;
+    
+    -l)
+      if [ -z "${script_map[$keyword_or_number]}" ]; then
+        echo -e "${RED}Invalid script number. Search for scripts first using -s <keyword>.${NC}"
+      else
+        script_name=${script_map[$keyword_or_number]}
+        echo -e "----------------------------------------------------------"
+        echo -e "${PURPLE}Information for script:${NC} ${RED}$script_name${NC}"
+        display_script_info "$script_name"
+        echo -e "----------------------------------------------------------"
+      fi
+      ;;
+
+    
+    -v)
+      if [ -z "$keyword_or_number" ]; then
+        echo -e "${RED}Please provide a target IP for vulnerability scanning.${NC}"
+      else
+        echo -e "${GREEN}Running vulnerability assessment on target $keyword_or_number... Press CTRL+C to cancel.${NC}"
+        nmap "$keyword_or_number" --script=vuln | tee -a "$LOG_FILE" &
+        scan_pid=$!
+        wait $scan_pid
+        echo -e "${GREEN}Scan finished or was canceled.${NC}"
+      fi
+      ;;
+    
+    -r)
+      if [ -z "${script_map[$keyword_or_number]}" ]; then
+        echo -e "${RED}Invalid script number. Search for scripts first using -s <keyword>.${NC}"
+      elif [ -z "$target_ip" ]; then
+        echo -e "${RED}Please provide a target IP for scanning.${NC}"
+      else
+        script_name=${script_map[$keyword_or_number]}
+        echo -e "${GREEN}Running script: $script_name on target $target_ip... Press CTRL+C to cancel.${NC}"
+        nmap "$target_ip" --script="$script_name" | tee -a "$LOG_FILE" &
+        scan_pid=$!
+        wait $scan_pid
+        echo -e "${GREEN}Scan finished or was canceled.${NC}"
+      fi
+      ;;
+    
+    -m)
+      if [ -z "$keyword_or_number" ]; then
+        echo -e "${RED}Please provide a target IP range for multi-target scanning.${NC}"
+      else
+        echo -e "${GREEN}Running multi-target scan on $keyword_or_number... Press CTRL+C to cancel.${NC}"
+        nmap -iL "$keyword_or_number" --script=default | tee -a "$LOG_FILE" &
+        scan_pid=$!
+        wait $scan_pid
+        echo -e "${GREEN}Scan finished or was canceled.${NC}"
+      fi
+      ;;
+    
+    exit)
+      echo -e "${GREEN}Exiting script.${NC}"
+      break
+      ;;
+    
+    *)
+      echo -e "${RED}Invalid option. Please enter a valid command from the available options.${NC}"
+      ;;
+  esac
+done
